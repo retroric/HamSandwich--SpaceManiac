@@ -4,6 +4,7 @@
 #include <vector>
 #include <sstream>
 #include "jamultypes.h"
+#include "sockets.h"
 
 namespace mp {
 
@@ -51,6 +52,9 @@ class Multiplayer {
 	std::ostringstream output;
 	std::string statusBuf;
 
+	sockets::Socket host;
+	std::vector<sockets::BufferedSocket> peers;
+
 	void queue(Sync *sync, Data *data);
 	friend class Sync;
 
@@ -62,6 +66,9 @@ public:
 
 	bool active();
 	const char* status();
+
+	void startHosting();
+	void connectTo(const char* addr);
 };
 
 }  // namespace mp

@@ -3,6 +3,7 @@
 #include <iostream>
 #include <algorithm>
 #include "hamworld.h"
+#include "sockets.h"
 
 namespace mp {
 
@@ -60,9 +61,80 @@ Sync Sync::object() {
 
 Multiplayer::Multiplayer()
 {
+	statusBuf = "asleep...";
+}
+
+static size_t complete_varint(const std::vector<uint8_t>& vec) {
+	for (size_t i = 0; i < vec.size(); ++i) {
+		if (!(vec[i] & 0x80)) {
+			return i + 1;
+		}
+	}
+	return 0;
+}
+
+static size_t complete_packet(const std::vector<uint8_t>& vec) {
+	size_t varint_len = complete_varint(vec);
+	if (!varint_len) return 0;
+
+	std::istringstream stream(std::string((char*) &vec[0], varint_len));
+	size_t length_prefix = 0;
+	if (!hamworld::read_varint(stream, &length_prefix)) {
+		return 0;
+	}
+
+	if (vec.size() >= varint_len + length_prefix) {
+		printf("varint_len: %d, length_prefix: %d\n", varint_len, length_prefix);
+		return varint_len + length_prefix;
+	} else {
+		return 0;
+	}
 }
 
 Sync Multiplayer::begin_sync() {
+	if (host) {
+		sockets::BufferedSocket peer = std::move(host.accept());
+		if (peer) {
+			peer.set_blocking(false);
+			peers.push_back(std::move(peer));
+		}
+	}
+
+	for (sockets::BufferedSocket& peer : peers) {
+		peer.send_more();
+		while (peer.recv_more()) {
+			// TODO: this sure does involve a lot of copying
+			std::istringstream buf(std::string((char*) peer.recv_buf.data(), peer.recv_buf.size()));
+			size_t length_prefix = 0;
+			if (!hamworld::read_varint(buf, &length_prefix))
+				continue;
+			size_t start = buf.tellg();
+			if (peer.recv_buf.size() < start + length_prefix)
+				continue;
+
+			while (buf.tellg() < start + length_prefix) {
+				size_t depth = 0;
+				hamworld::read_varint(buf, &depth);
+
+				Data *ptr = &data;
+				size_t idx;
+				for (size_t i = 0; i < depth; ++i) {
+					hamworld::read_varint(buf, &idx);
+					ptr = ptr->child(idx);
+				}
+
+				size_t value_len = 0;
+				hamworld::read_varint(buf, &value_len);
+				ptr->value.resize(value_len);
+				buf.read(ptr->value.data(), value_len);
+				ptr->needs_read = true;
+			}
+
+			//printf("consuming: %d\n", buf.tellg());
+			peer.consume(start + length_prefix);
+		}
+	}
+
 	data.retain_up_to = 0;
 	output.str("");
 	return Sync(this, nullptr, &data);
@@ -87,22 +159,65 @@ void Multiplayer::queue(Sync *sync, Data *data) {
 
 void Multiplayer::finish_sync() {
 	initialized = true;
-	//data.print();
-	//std::cout << std::endl;
 
-	std::string stuff = output.str();
-	if (!stuff.empty()) {
-		std::ofstream meme("/home/tad/work/HamSandwich/meme.dat");
-		meme << stuff;
+	std::string data = output.str();
+	if (data.size()) {
+		std::ostringstream length_prefix;
+		hamworld::write_varint(length_prefix, data.size());
+		std::string prefix = length_prefix.str();
+
+		for (sockets::BufferedSocket& peer : peers) {
+			//printf("sending packet: %d\n", (int)data.size());
+			peer.send_all((uint8_t*) prefix.data(), prefix.size());
+			peer.send_all((uint8_t*) data.data(), data.size());
+			peer.send_more();
+		}
 	}
 }
 
 bool Multiplayer::active() {
-	return true;
+	return host || peers.size();
 }
 
 const char* Multiplayer::status() {
-	return "";
+	return statusBuf.c_str();
+}
+
+void Multiplayer::startHosting() {
+	statusBuf = "Failed";
+
+	sockets::Address res = sockets::lookup(nullptr, "10027");
+	sockets::Socket sock(res->ai_family, res->ai_socktype, res->ai_protocol);
+	if (!sock) return;
+	if (!sock.bind(res.get())) return;
+	if (!sock.listen()) return;
+	if (!sock.set_blocking(false)) return;
+	host = std::move(sock);
+
+	statusBuf = "Hosting server";
+}
+
+void Multiplayer::connectTo(const char* addr) {
+	sockets::Address set = sockets::lookup("localhost", "10028");
+
+	host.clear();
+	statusBuf.clear();
+	peers.clear();
+	for (addrinfo *ptr = set.get(); ptr; ptr = ptr->ai_next) {
+		sockets::BufferedSocket sock;
+		if (!sock.create(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol)) continue;
+		if (!sock.connect(ptr)) continue;
+		if (!sock.set_blocking(false)) continue;
+
+		peers.push_back(std::move(sock));
+		break;
+	}
+
+	if (peers.empty()) {
+		statusBuf = "Failed";
+	} else {
+		statusBuf = "Connected to server";
+	}
 }
 
 }  // namespace mp

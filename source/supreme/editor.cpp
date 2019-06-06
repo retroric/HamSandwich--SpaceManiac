@@ -631,8 +631,38 @@ static void MpTest(mp::Sync sync)
 	sync.field(world.numMaps);
 	mp::Sync maps = sync.object();
 	for (size_t i = 0; i < world.numMaps; ++i) {
+		if (!world.map[i])
+			world.map[i] = new Map(1, "__BLANK__");
+		Map* map = world.map[i];
+
 		mp::Sync m = maps.object();
-		m.field(world.map[i]->name);
+		m.field(map->name);
+		m.field(map->song);
+		m.field(map->flags);
+		m.field(map->numBrains);
+		m.field(map->numCandles);
+		m.field(map->itemDrops);
+
+		byte width = map->width, height = map->height;
+		m.field(width);
+		m.field(height);
+		if (width != map->width || height != map->height)
+			map->Resize(width, height);
+
+		mp::Sync tiles = m.object();
+		for (size_t i = 0; i < (int)width * (int)height; ++i) {
+			tiles.field(map->map[i]);
+		}
+
+		mp::Sync mons = m.object();
+		for (size_t i = 0; i < MAX_MAPMONS; ++i) {
+			mons.field(map->badguy[i]);
+		}
+
+		mp::Sync spcl = m.object();
+		for (size_t i = 0; i < MAX_SPECIAL; ++i) {
+			spcl.field(map->special[i]);
+		}
 	}
 }
 
@@ -795,6 +825,14 @@ static void HandleKeyPresses(void)
 
 	switch(s)
 	{
+		case SDL_SCANCODE_F2:
+			multiplayer.startHosting();
+			break;
+
+		case SDL_SCANCODE_F3:
+			multiplayer.connectTo("");
+			break;
+
 		case SDL_SCANCODE_LEFT: // left arrow
 		case SDL_SCANCODE_KP_4:
 			GetCamera(&x,&y);
