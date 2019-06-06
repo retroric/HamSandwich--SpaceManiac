@@ -12,6 +12,7 @@
 #include "viewdialog.h"
 #include "worldstitch.h"
 #include "levelscan.h"
+#include "mpedit.h"
 
 #define PLOPRATE	5
 
@@ -613,6 +614,28 @@ void EditorShowRect(void)
 	DrawBox(x1,y1,x2,y2,col);
 }
 
+static mp::Multiplayer multiplayer;
+
+static void MpTest(mp::Sync sync)
+{
+	sync.field(world.author);
+
+	sync.field(world.numTiles);
+	mp::Sync tiles = sync.object();
+	for (size_t i = 0; i < world.numTiles; ++i) {
+		mp::Sync tile = tiles.object();
+		tile.field(world.terrain[i].flags);
+		tile.field(world.terrain[i].next);
+	}
+
+	sync.field(world.numMaps);
+	mp::Sync maps = sync.object();
+	for (size_t i = 0; i < world.numMaps; ++i) {
+		mp::Sync m = maps.object();
+		m.field(world.map[i]->name);
+	}
+}
+
 void EditorDraw(void)
 {
 	char s[16];
@@ -746,6 +769,12 @@ void EditorDraw(void)
 			RenderLevelDialog(mouseX,mouseY,editmgl);
 			break;
 	}
+
+	if (multiplayer.active()) {
+		MpTest(multiplayer.begin_sync());
+		multiplayer.finish_sync();
+	}
+	Print(5, 5, multiplayer.status(), 0, 1);
 
 	// draw the mouse cursor
 	DrawMouseCursor(mouseX,mouseY);
