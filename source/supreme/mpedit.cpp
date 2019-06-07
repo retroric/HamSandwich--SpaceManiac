@@ -64,33 +64,6 @@ Multiplayer::Multiplayer()
 	statusBuf = "asleep...";
 }
 
-static size_t complete_varint(const std::vector<uint8_t>& vec) {
-	for (size_t i = 0; i < vec.size(); ++i) {
-		if (!(vec[i] & 0x80)) {
-			return i + 1;
-		}
-	}
-	return 0;
-}
-
-static size_t complete_packet(const std::vector<uint8_t>& vec) {
-	size_t varint_len = complete_varint(vec);
-	if (!varint_len) return 0;
-
-	std::istringstream stream(std::string((char*) &vec[0], varint_len));
-	size_t length_prefix = 0;
-	if (!hamworld::read_varint(stream, &length_prefix)) {
-		return 0;
-	}
-
-	if (vec.size() >= varint_len + length_prefix) {
-		printf("varint_len: %d, length_prefix: %d\n", varint_len, length_prefix);
-		return varint_len + length_prefix;
-	} else {
-		return 0;
-	}
-}
-
 Sync Multiplayer::begin_sync() {
 	if (host) {
 		sockets::BufferedSocket peer = std::move(host.accept());
