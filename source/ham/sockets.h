@@ -17,6 +17,8 @@
 
 namespace sockets {
 
+int get_error();
+
 struct _addrinfo_deleter {
 	void operator()(addrinfo* info) { freeaddrinfo(info); }
 };

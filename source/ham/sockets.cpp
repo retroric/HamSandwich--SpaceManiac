@@ -7,22 +7,57 @@
 
 namespace sockets {
 
-Address lookup(const char* host, const char* port) {
-    addrinfo hints;
-    memset(&hints, 0, sizeof hints); // make sure the struct is empty
-    hints.ai_family = AF_UNSPEC;     // don't care IPv4 or IPv6
-    hints.ai_socktype = SOCK_STREAM; // TCP stream sockets
-    if (!host) {    // if server...
-        hints.ai_flags = AI_PASSIVE; // fill in my IP for me
-    }
+#ifdef _WIN32
 
-    int status;
-    addrinfo *servinfo;  // will point to the results
-    if ((status = getaddrinfo(host, port, &hints, &servinfo)) != 0) {
-        fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
-        servinfo = nullptr;
-    }
-    return Address(servinfo);
+static bool called_wsa_startup = false;
+
+static void cleanup() {
+	WSACleanup();
+}
+
+void init() {
+	if (!called_wsa_startup) {
+		WSAData data;
+		if (WSAStartup(MAKEWORD(2, 0), &data) != 0) {
+			return;
+		}
+		atexit(cleanup);
+		called_wsa_startup = true;
+	}
+}
+
+int get_error() {
+	return WSAGetLastError();
+}
+
+#else  // _WIN32
+
+inline void init() {}
+
+int get_error() {
+	return errno;
+}
+
+#endif
+
+Address lookup(const char* host, const char* port) {
+	init();
+
+	addrinfo hints;
+	memset(&hints, 0, sizeof hints); // make sure the struct is empty
+	hints.ai_family = AF_UNSPEC;     // don't care IPv4 or IPv6
+	hints.ai_socktype = SOCK_STREAM; // TCP stream sockets
+	if (!host) {    // if server...
+		hints.ai_flags = AI_PASSIVE; // fill in my IP for me
+	}
+
+	int status;
+	addrinfo *servinfo;  // will point to the results
+	if ((status = getaddrinfo(host, port, &hints, &servinfo)) != 0) {
+		fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
+		servinfo = nullptr;
+	}
+	return Address(servinfo);
 }
 
 Socket::Socket() noexcept
@@ -53,12 +88,13 @@ void Socket::clear() {
 }
 
 Socket::Socket(int domain, int type, int protocol)
-	: SocketRef(socket(domain, type, protocol))
+	: SocketRef((init(), socket(domain, type, protocol)))
 {
 }
 
 bool Socket::create(int domain, int type, int protocol) {
 	clear();
+	init();
 	fd = socket(domain, type, protocol);
 	return *this;
 }
@@ -99,11 +135,11 @@ bool SocketRef::connect(const addrinfo *info) {
 }
 
 int SocketRef::send(const void *msg, int len) {
-	return ::send(fd, msg, len, 0);
+	return ::send(fd, (char*) msg, len, 0);
 }
 
 int SocketRef::recv(void *buf, int len) {
-	return ::recv(fd, buf, len, 0);
+	return ::recv(fd, (char*) buf, len, 0);
 }
 
 BufferedSocket::BufferedSocket() noexcept {

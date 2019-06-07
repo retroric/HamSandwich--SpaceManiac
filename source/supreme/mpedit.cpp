@@ -204,6 +204,8 @@ void Multiplayer::startHosting() {
 	statusBuf = "Failed";
 
 	sockets::Address res = sockets::lookup(nullptr, "10027");
+	if (!res) return;
+
 	sockets::Socket sock(res->ai_family, res->ai_socktype, res->ai_protocol);
 	if (!sock) return;
 	if (!sock.bind(res.get())) return;
