@@ -803,8 +803,9 @@ void EditorDraw(void)
 	if (multiplayer.active()) {
 		MpTest(multiplayer.begin_sync());
 		multiplayer.finish_sync();
+		AddMapGuys(EditorGetMap());
+		Print(5, 5, multiplayer.status(), 0, 1);
 	}
-	Print(5, 5, multiplayer.status(), 0, 1);
 
 	// draw the mouse cursor
 	DrawMouseCursor(mouseX,mouseY);

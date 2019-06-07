@@ -64,18 +64,51 @@ Multiplayer::Multiplayer()
 	statusBuf = "asleep...";
 }
 
+static void write_everything(std::vector<size_t>& path, std::ostream& out, Data* data) {
+	hamworld::write_varint(out, path.size());
+	for (size_t piece : path) {
+		hamworld::write_varint(out, piece);
+	}
+	hamworld::write_varint(out, data->value.size());
+	out.write(data->value.data(), data->value.size());
+
+	for (size_t i = 0; i < data->retain_up_to; ++i) {
+		path.push_back(i);
+		write_everything(path, out, &data->children[i]);
+		path.pop_back();
+	}
+}
+
 Sync Multiplayer::begin_sync() {
 	if (host) {
 		sockets::BufferedSocket peer = std::move(host.accept());
 		if (peer) {
 			peer.set_blocking(false);
+
+			// send them everything
+			std::vector<size_t> path;
+			std::ostringstream stuff;
+			write_everything(path, stuff, &data);
+
+			std::string data = stuff.str();
+			std::ostringstream length_prefix;
+			hamworld::write_varint(length_prefix, data.size());
+			std::string prefix = length_prefix.str();
+
+			peer.send_all((uint8_t*) prefix.data(), prefix.size());
+			peer.send_all((uint8_t*) data.data(), data.size());
+
 			peers.push_back(std::move(peer));
 		}
 	}
 
-	for (sockets::BufferedSocket& peer : peers) {
+	for (auto it = peers.begin(); it != peers.end(); ++it) {
+		sockets::BufferedSocket& peer = *it;
+
 		peer.send_more();
-		while (peer.recv_more()) {
+		bool consumed = false;
+		while (peer.recv_more() || consumed) {
+			consumed = false;
 			// TODO: this sure does involve a lot of copying
 			std::istringstream buf(std::string((char*) peer.recv_buf.data(), peer.recv_buf.size()));
 			size_t length_prefix = 0;
@@ -105,6 +138,12 @@ Sync Multiplayer::begin_sync() {
 
 			//printf("consuming: %d\n", buf.tellg());
 			peer.consume(start + length_prefix);
+			consumed = true;
+		}
+
+		if (peer.closed) {
+			it = peers.erase(it);
+			if (it == peers.end()) break;
 		}
 	}
 
@@ -153,6 +192,11 @@ bool Multiplayer::active() {
 }
 
 const char* Multiplayer::status() {
+	if (host) {
+		std::ostringstream s;
+		s << "Hosting server: " << peers.size() << " connected";
+		statusBuf = s.str();
+	}
 	return statusBuf.c_str();
 }
 

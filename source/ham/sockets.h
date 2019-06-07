@@ -65,6 +65,7 @@ public:
 struct BufferedSocket : public Socket {
 	std::vector<uint8_t> send_buf;
 	std::vector<uint8_t> recv_buf;
+	bool closed = false;  // set when recv() returns 0
 
 	BufferedSocket() noexcept;
 	BufferedSocket(Socket&&) noexcept;

@@ -137,6 +137,9 @@ bool BufferedSocket::recv_more() {
 	int read = recv(&recv_buf[initial_size], added_size);
 	if (read <= 0) {
 		recv_buf.resize(initial_size);
+		if (read == 0) {
+			closed = true;
+		}
 		return false;
 	}
 	recv_buf.resize(initial_size + read);
