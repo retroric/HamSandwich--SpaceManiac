@@ -188,6 +188,7 @@ void ExitLevel(void)
 	player.hammers=0;
 
 	delete curMap;
+	curMap = nullptr;
 	PurgeMonsterSprites();
 	gamemgl->RealizePalette();
 	if(shopping)
@@ -589,6 +590,9 @@ void LunaticDraw(void)
 		visFrms=0;
 		tickerTime=d;
 	}
+
+	extern void MpEditUpdate();
+	MpEditUpdate();
 
 	if(profile.progress.purchase[modeShopNum[MODE_TEENY]]&SIF_ACTIVE)
 	{

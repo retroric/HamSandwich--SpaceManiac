@@ -69,6 +69,7 @@ public:
 
 	void startHosting();
 	void connectTo(const char* addr);
+	void stop();
 };
 
 }  // namespace mp

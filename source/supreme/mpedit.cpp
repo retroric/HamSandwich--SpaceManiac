@@ -237,4 +237,9 @@ void Multiplayer::connectTo(const char* addr) {
 	}
 }
 
+void Multiplayer::stop() {
+	host.clear();
+	peers.clear();
+}
+
 }  // namespace mp

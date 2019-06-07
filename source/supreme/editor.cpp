@@ -49,6 +49,8 @@ static int lastPick;
 
 byte editMode=EDITMODE_EDIT;
 
+static mp::Multiplayer multiplayer;
+
 byte InitEditor(void)
 {
 	int i;
@@ -159,6 +161,7 @@ void ExitEditor(void)
 	FreeWorld(&world);
 	PurgeMonsterSprites();
 	editing=0;
+	multiplayer.stop();
 }
 
 void Delete(int x,int y)
@@ -614,9 +617,7 @@ void EditorShowRect(void)
 	DrawBox(x1,y1,x2,y2,col);
 }
 
-static mp::Multiplayer multiplayer;
-
-static void MpTest(mp::Sync sync)
+static void MpSync(mp::Sync sync)
 {
 	sync.field(world.author);
 
@@ -626,6 +627,7 @@ static void MpTest(mp::Sync sync)
 		mp::Sync tile = tiles.object();
 		tile.field(world.terrain[i].flags);
 		tile.field(world.terrain[i].next);
+		tile.field(* (tile_t*) GetTileData(i));
 	}
 
 	sync.field(world.numMaps);
@@ -663,6 +665,19 @@ static void MpTest(mp::Sync sync)
 		for (size_t i = 0; i < MAX_SPECIAL; ++i) {
 			spcl.field(map->special[i]);
 		}
+	}
+}
+
+void MpEditUpdate()
+{
+	if (multiplayer.active())
+	{
+		MpSync(multiplayer.begin_sync());
+		multiplayer.finish_sync();
+		if (!curMap) {
+			AddMapGuys(EditorGetMap());
+		}
+		Print(5, 5, multiplayer.status(), 0, 1);
 	}
 }
 
@@ -800,12 +815,7 @@ void EditorDraw(void)
 			break;
 	}
 
-	if (multiplayer.active()) {
-		MpTest(multiplayer.begin_sync());
-		multiplayer.finish_sync();
-		AddMapGuys(EditorGetMap());
-		Print(5, 5, multiplayer.status(), 0, 1);
-	}
+	MpEditUpdate();
 
 	// draw the mouse cursor
 	DrawMouseCursor(mouseX,mouseY);
